@@ -1,13 +1,7 @@
 --[[
-	Script: Coordinate and Waypoint System for Executors
-	Description: Displays live locations of all players and allows the user to save personal waypoints.
-	Created for use with loadstring(game:HttpGet(...))()
+	Script: Coordinate and Waypoint System for Executors (Instant Update Version)
+	Description: Displays live locations of all players and allows the user to save personal waypoints. Updates every frame for a smooth experience.
 ]]
-
--- ================= CONFIGURATION =================
-local UPDATE_INTERVAL = 2 -- seconds | How often to refresh live player locations.
--- ===============================================
-
 
 -- Prevent the script from running multiple times
 if game.Players.LocalPlayer:FindFirstChild("PlayerGui"):FindFirstChild("CoordinatesMenu_Executor") then
@@ -125,39 +119,44 @@ waypointList.Parent = mainFrame
 -- ================= SCRIPT LOGIC =================
 
 local myWaypoints = {}
-
--- Function to create a list item entry
-local function createEntry(name, positionText)
-	local entryFrame = Instance.new("TextLabel")
-	entryFrame.Size = UDim2.new(1, 0, 0, 25)
-	entryFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
-	entryFrame.Font = Enum.Font.Code
-	entryFrame.TextSize = 14
-	entryFrame.TextColor3 = Color3.fromRGB(230, 230, 230)
-	entryFrame.Text = "  " .. name .. string.rep(" ", 20) .. positionText
-	entryFrame.TextXAlignment = Enum.TextXAlignment.Left
-	return entryFrame
-end
+local livePlayerEntries = {}
 
 -- Function to update the live player list
 local function updateLiveList()
-	liveList:ClearAllChildren()
-	local listLayout = Instance.new("UIListLayout") -- Re-add layout
-	listLayout.Padding = UDim.new(0, 4)
-	listLayout.Parent = liveList
+	local players = Players:GetPlayers()
 	
-	for _, player in ipairs(Players:GetPlayers()) do
-		local positionText = "N/A"
-		if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-			local pos = player.Character.HumanoidRootPart.Position
-			positionText = string.format("%d, %d, %d", pos.X, pos.Y, pos.Z)
+	-- Update existing entries and remove old ones
+	for player, entry in pairs(livePlayerEntries) do
+		if not player or not player:IsDescendantOf(Players) then
+			entry:Destroy()
+			livePlayerEntries[player] = nil
+		else
+			local positionText = "N/A"
+			if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+				local pos = player.Character.HumanoidRootPart.Position
+				positionText = string.format("%d, %d, %d", pos.X, pos.Y, pos.Z)
+			end
+			entry.Text = string.format("  %-18s %s", player.DisplayName, positionText)
 		end
-		
-		local entry = createEntry(player.DisplayName, positionText)
-		if player == LocalPlayer then
-			entry.TextColor3 = Color3.fromRGB(120, 220, 120) -- Highlight self
+	end
+	
+	-- Add new players
+	for _, player in ipairs(players) do
+		if not livePlayerEntries[player] then
+			local entryFrame = Instance.new("TextLabel")
+			entryFrame.Size = UDim2.new(1, 0, 0, 25)
+			entryFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
+			entryFrame.Font = Enum.Font.Code
+			entryFrame.TextSize = 14
+			entryFrame.TextColor3 = Color3.fromRGB(230, 230, 230)
+			entryFrame.TextXAlignment = Enum.TextXAlignment.Left
+			entryFrame.Name = player.Name
+			if player == LocalPlayer then
+				entryFrame.TextColor3 = Color3.fromRGB(120, 220, 120) -- Highlight self
+			end
+			entryFrame.Parent = liveList
+			livePlayerEntries[player] = entryFrame
 		end
-		entry.Parent = liveList
 	end
 end
 
@@ -171,7 +170,15 @@ local function addWaypoint()
 	
 	table.insert(myWaypoints, {Name = waypointName, Pos = positionText})
 	
-	local entry = createEntry(waypointName, positionText)
+	local entryFrame = Instance.new("TextLabel")
+	entryFrame.Size = UDim2.new(1, 0, 0, 25)
+	entryFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
+	entryFrame.Font = Enum.Font.Code
+	entryFrame.TextSize = 14
+	entryFrame.TextColor3 = Color3.fromRGB(230, 230, 230)
+	entryFrame.Text = string.format("  %-18s %s", waypointName, positionText)
+	entryFrame.TextXAlignment = Enum.TextXAlignment.Left
+	entryFrame.Parent = waypointList
 	
 	-- Add a delete button to the waypoint
 	local deleteBtn = Instance.new("TextButton")
@@ -182,7 +189,7 @@ local function addWaypoint()
 	deleteBtn.Font = Enum.Font.SourceSansBold
 	deleteBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 	deleteBtn.TextSize = 12
-	deleteBtn.Parent = entry
+	deleteBtn.Parent = entryFrame
 	
 	deleteBtn.MouseButton1Click:Connect(function()
 		for i, v in ipairs(myWaypoints) do
@@ -191,32 +198,25 @@ local function addWaypoint()
 				break
 			end
 		end
-		entry:Destroy()
+		entryFrame:Destroy()
 	end)
-	
-	entry.Parent = waypointList
 end
 
-
 -- ================= EVENT CONNECTIONS =================
+local heartBeatConnection
 
 -- Close button logic
 closeButton.MouseButton1Click:Connect(function()
+	if heartBeatConnection then
+		heartBeatConnection:Disconnect() -- Stop the update loop
+	end
 	screenGui:Destroy()
 end)
 
 -- Save waypoint button logic
 saveWaypointButton.MouseButton1Click:Connect(addWaypoint)
 
+-- Main update loop connected to the game's heartbeat for instant updates
+heartBeatConnection = RunService.Heartbeat:Connect(updateLiveList)
 
--- Main loop to keep live list updated
-spawn(function()
-	while screenGui.Parent do
-		updateLiveList()
-		wait(UPDATE_INTERVAL)
-	end
-end)
-
--- Initial update
-updateLiveList()
-print("Coordinate & Waypoint script loaded successfully.")
+print("Coordinate & Waypoint script (Instant Update) loaded successfully.")
