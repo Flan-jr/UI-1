@@ -1,57 +1,89 @@
--- Modern UI Script for Coordinates and Teleportation
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/7Lib/Main/main/Library.lua"))() -- مكتبة واجهة عصرية
-local Window = Library:CreateWindow("Modern Navigator 2026", "التحكم بالإحداثيات", 10044538561)
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/xHeptc/Kavo-UI-Library/main/source.lua"))()
+local Window = Library.CreateLib("Modern Navigator 2026", "DarkScene")
 
--- صفحة الإحداثيات الشخصية
-local MainTab = Window:CreateTab("الرئيسية")
-local Section = MainTab:CreateSection("إحداثياتي")
+-- الإعدادات العامة
+local MainTab = Window:NewTab("الرئيسية")
+local PlayerTab = Window:NewTab("اللاعبين")
+local FlyTab = Window:NewTab("الطيران (Fly)")
+local SaveTab = Window:NewTab("المواقع المحفوظة")
 
-local LabelX = MainTab:CreateLabel("X: 0")
-local LabelY = MainTab:CreateLabel("Y: 0")
-local LabelZ = MainTab:CreateLabel("Z: 0")
+-- [1] صفحة الإحداثيات
+local MainSection = MainTab:NewSection("إحداثياتك الحالية")
+local LabelPos = MainSection:NewLabel("X: 0 | Y: 0 | Z: 0")
 
--- تحديث الإحداثيات تلقائياً
 task.spawn(function()
-    while task.wait(0.1) do
-        local pos = game.Players.LocalPlayer.Character.HumanoidRootPart.Position
-        LabelX:SetText("X: " .. math.floor(pos.X))
-        LabelY:SetText("Y: " .. math.floor(pos.Y))
-        LabelZ:SetText("Z: " .. math.floor(pos.Z))
+    while task.wait(0.2) do
+        local lp = game.Players.LocalPlayer.Character
+        if lp and lp:FindFirstChild("HumanoidRootPart") then
+            local pos = lp.HumanoidRootPart.Position
+            LabelPos:UpdateLabel(string.format("X: %.1f | Y: %.1f | Z: %.1f", pos.X, pos.Y, pos.Z))
+        end
     end
 end)
 
--- صفحة اللاعبين والانتقال
-local PlayersTab = Window:CreateTab("اللاعبين")
-local PSection = PlayersTab:CreateSection("انتقال سريع")
+-- [2] ميزة الطيران (Fly) مع Shift
+local FlySection = FlyTab:NewSection("التحكم بالطيران")
+local flying = false
+local speed = 50
+local normalSpeed = 50
+local fastSpeed = 150 -- السرعة عند ضغط Shift
 
-PlayersTab:CreateDropdown("اختر لاعب للانتقال", function(selectedPlayer)
-    local target = game.Players:FindFirstChild(selectedPlayer)
-    if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+FlySection:NewToggle("تفعيل الطيران", "طيران بضغطة زر", function(state)
+    flying = state
+    local player = game.Players.LocalPlayer
+    local mouse = player:GetMouse()
+    local char = player.Character
+    local root = char:FindFirstChild("HumanoidRootPart")
+    
+    if flying then
+        local bv = Instance.new("BodyVelocity", root)
+        bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        bv.Velocity = Vector3.new(0, 0.1, 0)
+        bv.Name = "FlyVelocity"
+        
+        task.spawn(function()
+            while flying do
+                task.wait()
+                -- التحقق من ضغط Shift لزيادة السرعة
+                local currentSpeed = game:GetService("UserInputService"):IsKeyDown(Enum.KeyCode.LeftShift) and fastSpeed or speed
+                
+                bv.Velocity = mouse.Hit.LookVector * currentSpeed
+                if not flying then bv:Destroy() break end
+            end
+        end)
+    else
+        if root:FindFirstChild("FlyVelocity") then root.FlyVelocity:Destroy() end
+    end
+end)
+
+FlySection:NewSlider("السرعة العادية", "تعديل سرعة الطيران", 200, 10, function(s)
+    speed = s
+end)
+
+-- [3] قائمة اللاعبين
+local PlayerSection = PlayerTab:NewSection("قائمة اللاعبين")
+local players = {}
+for _, v in pairs(game.Players:GetPlayers()) do
+    if v ~= game.Players.LocalPlayer then table.insert(players, v.Name) end
+end
+
+PlayerSection:NewDropdown("اختر لاعب للانتقال له", "انتقل لأي شخص", players, function(selected)
+    local target = game.Players:FindFirstChild(selected)
+    if target and target.Character then
         game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = target.Character.HumanoidRootPart.CFrame
-        Library:Notify("تم الانتقال", "وصلت إلى " .. selectedPlayer, 3)
-    end
-end, (function()
-    local names = {}
-    for _, v in pairs(game.Players:GetPlayers()) do
-        if v.Name ~= game.Players.LocalPlayer.Name then table.insert(names, v.Name) end
-    end
-    return names
-end)())
-
--- صفحة حفظ المواقع
-local SaveTab = Window:CreateTab("المواقع المحفوظة")
-local SavedPositions = {}
-
-SaveTab:CreateInput("اسم الموقع", "ادخل اسم لحفظ مكانك", function(text)
-    local pos = game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame
-    SavedPositions[text] = pos
-    Library:Notify("تم الحفظ", "تم حفظ موقع: " .. text, 3)
-end)
-
-SaveTab:CreateButton("عرض المواقع المحفوظة (Console)", function()
-    for name, _ in pairs(SavedPositions) do
-        print("موقع محفوظ: " .. name)
     end
 end)
 
--- ملاحظة: يمكنك إضافة أزرار ديناميكية هنا لكل موقع يتم حفظه
+-- [4] حفظ المواقع
+local SavedPosSection = SaveTab:NewSection("إدارة المواقع")
+local savedLocations = {}
+
+SavedPosSection:NewTextBox("اسم الموقع", "اكتب الاسم هنا واضغط Enter", function(txt)
+    local char = game.Players.LocalPlayer.Character
+    if char then
+        savedLocations[txt] = char.HumanoidRootPart.CFrame
+        SavedPosSection:NewButton("انتقل إلى: "..txt, "العودة للموقع", function()
+            char.HumanoidRootPart.CFrame = savedLocations[txt]
+        end)
+    end
+end)
